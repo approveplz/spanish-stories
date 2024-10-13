@@ -101,8 +101,24 @@ const extractLanguageFromFilename = (filename) => {
     return match ? match[1] : '';
 };
 
+const sortFilesAsc = (fileA, fileB) => {
+    const numA = extractNumberFromFilename(fileA);
+    const numB = extractNumberFromFilename(fileB);
+    const langA = extractLanguageFromFilename(fileA);
+    const langB = extractLanguageFromFilename(fileB);
 
+    // Sort by number (ascending)
+    if (numA !== numB) {
+        return numA - numB;
+    }
 
+    // If numbers are the same, prioritize 'sp' before 'en'
+    if (langA !== langB) {
+        return langA === 'sp' ? -1 : 1; // 'sp' comes before 'en'
+    }
+
+    return 0; // If both number and language are the same, keep original order
+};
 
 const mergeAndProcessAudioFiles = async (
     inputFolder,
@@ -112,51 +128,122 @@ const mergeAndProcessAudioFiles = async (
     const files = fs
         .readdirSync(inputFolder)
         .filter((file) => file.endsWith('.mp3'))
-        .sort((a, b) => {
-            const numA = extractNumberFromFilename(a);
-            const numB = extractNumberFromFilename(b);
-            const langA = extractLanguageFromFilename(a);
-            const langB = extractLanguageFromFilename(b);
+        .sort(sortFilesAsc);
 
-            // Sort by number (ascending)
-            if (numA !== numB) {
-                return numA - numB;
+    // Process all files (change speed)
+    const slowedPaths_en_sp = await Promise.all(
+        files.map(async (file) => {
+            const inputPath = path.join(inputFolder, file);
+            const outputPathSlowed = path.join(tempFolder, `slowed_${file}`);
+            const language = extractLanguageFromFilename(file);
+            const speed = language === 'sp' ? 0.85 : 1.0;
+            await changeAudioSpeed(inputPath, outputPathSlowed, speed);
+            return outputPathSlowed;
+        })
+    );
+
+    // Add silence to Spanish files
+    const spanishFilesWithSilence = await Promise.all(
+        slowedPaths_en_sp
+            .filter(
+                (file) =>
+                    extractLanguageFromFilename(path.basename(file)) === 'sp'
+            )
+            .map(async (file) => {
+                const outputPathWithSilence = path.join(
+                    tempFolder,
+                    `short_silence_${path.basename(file)}`
+                );
+                await addSilence(file, outputPathWithSilence, 1);
+                return outputPathWithSilence;
+            })
+    );
+
+    const spanishSlowMergedShortSilencePath = path.join(
+        tempFolder,
+        'spanish_slow_merged_short_silence.mp3'
+    );
+    await mergeFiles(
+        spanishFilesWithSilence,
+        spanishSlowMergedShortSilencePath
+    );
+
+    // Clean up Spanish files with short silence
+    spanishFilesWithSilence.forEach((file) => fs.unlinkSync(file));
+
+    const slowSilencePaths_en_sp = await Promise.all(
+        slowedPaths_en_sp.map(async (file) => {
+            const outputPathWithSilence = path.join(
+                tempFolder,
+                `silence_${path.basename(file)}`
+            );
+            await addSilence(file, outputPathWithSilence, 1.75);
+            return outputPathWithSilence;
+        })
+    );
+
+    // Clean up slowed files
+    slowedPaths_en_sp.forEach((file) => fs.unlinkSync(file));
+
+    const slowSilenceMergedPath_en_sp = path.join(
+        tempFolder,
+        `slow_silence_merged_en_sp.mp3`
+    );
+    await mergeFiles(slowSilencePaths_en_sp, slowSilenceMergedPath_en_sp);
+
+    // Clean up files with silence
+    slowSilencePaths_en_sp.forEach((file) => fs.unlinkSync(file));
+
+    const finalOutputPath = path.join(outputFolder, `final_output.mp3`);
+
+    await mergeFiles(
+        [
+            MUSIC_FILEPATH,
+            spanishSlowMergedShortSilencePath,
+            slowSilenceMergedPath_en_sp,
+            MUSIC_FILEPATH,
+        ],
+        finalOutputPath
+    );
+
+    // Clean up final temporary files
+    fs.unlinkSync(spanishSlowMergedShortSilencePath);
+    fs.unlinkSync(slowSilenceMergedPath_en_sp);
+
+    return finalOutputPath;
+};
+
+const mergeFiles = (inputPaths, outputPath) => {
+    return new Promise((resolve, reject) => {
+        const concatProcess = ffmpeg();
+
+        if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
+            return reject(new Error('Invalid or empty input paths array'));
+        }
+
+        inputPaths.forEach((file) => {
+            if (typeof file !== 'string' || file.trim() === '') {
+                return reject(new Error(`Invalid input path: ${file}`));
             }
-
-            // If numbers are the same, prioritize 'sp' before 'en'
-            if (langA !== langB) {
-                return langA === 'sp' ? -1 : 1; // 'sp' comes before 'en'
-            }
-
-            return 0; // If both number and language are the same, keep original order
+            concatProcess.input(file);
         });
 
-    const processedPaths = [];
-    for (const file of files) {
-        const inputPath = path.join(inputFolder, file);
-        const outputPathSlowed = path.join(tempFolder, `slowed_${file}`);
-        const language = extractLanguageFromFilename(file);
-        let speed = language === 'sp' ? 0.85 : 1.0;
-        await changeAudioSpeed(inputPath, outputPathSlowed, speed);
-        const outputPathSlowed_Silence = path.join(
-            tempFolder,
-            `slowed_silence_${file}`
-        );
-        const processedPath = await addSilence(
-            outputPathSlowed,
-            outputPathSlowed_Silence,
-            2
-        );
-        // Delete temp slowed file when handled
-        fs.unlinkSync(outputPathSlowed);
-        processedPaths.push(processedPath);
-    }
-
-    await concatenateFiles(processedPaths, outputFolder);
-    // Delete temp processed files after concatenated
-    for (const path of processedPaths) {
-        fs.unlinkSync(path);
-    }
+        concatProcess
+            .on('end', () => {
+                console.log(
+                    `Concatenation completed successfully. Output path: ${outputPath}`
+                );
+                resolve(outputPath);
+            })
+            .on('error', (err) => {
+                console.error(
+                    'An error occurred during concatenation:',
+                    err.message
+                );
+                reject(err);
+            })
+            .mergeToFile(outputPath, path.dirname(outputPath));
+    });
 };
 
 const getAudioFiles = async (outputFolder) => {
@@ -196,7 +283,7 @@ const getAudioFiles = async (outputFolder) => {
 };
 
 const execute = async () => {
-    await getAudioFiles(INPUT_FOLDER);
+    // await getAudioFiles(INPUT_FOLDER);
     await mergeAndProcessAudioFiles(INPUT_FOLDER, OUTPUT_FOLDER, TEMP_FOLDER);
 };
 
