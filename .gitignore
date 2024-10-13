@@ -1,0 +1,12 @@
+.env
+
+/node_modules
+
+.DS_Store
+
+# Audio files
+/audio_input
+/audio_output
+/temp
+/music
+/archive
