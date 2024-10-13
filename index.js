@@ -18,113 +18,84 @@ const INPUT_FOLDER = './audio_input';
 const OUTPUT_FOLDER = './audio_output';
 const TEMP_FOLDER = './temp';
 const TRANSCRIPTS_FOLDER = './transcripts';
-const MUSIC_FILEPATH = './music/intro.mp3';
+const MUSIC_FILEPATH = './assets/theme_music.mp3';
+const INTRO_MUSIC_SPEECH_FILEPATH = './assets/intro_music_with_speech.mp3';
+const MISC_INPUT_FOLDER = './misc_input';
 
-const changeAudioSpeed = (inputPath, outputPath, speed) => {
-    return new Promise((resolve, reject) => {
-        ffmpeg(inputPath)
-            .audioFilters(`atempo=${speed}`)
-            .output(outputPath)
-            .on('end', () => {
-                console.log(
-                    `Audio file successfully slowed. File: ${inputPath}. Output: ${outputPath}. Speed: ${speed}`
-                );
-                resolve(outputPath);
-            })
-            .on('error', (err) => {
-                console.error('An error occurred:', err.message);
-                reject(err);
-            })
-            .run();
-    });
+const execute = async () => {
+    const storyObj = await llmGenerate();
+
+    const storyTitle = storyObj['title']['english'];
+
+    const { hookFilePath, outputFolder } = await getAudioFiles(
+        INPUT_FOLDER,
+        MISC_INPUT_FOLDER,
+        storyObj
+    );
+    await mergeAndProcessAudioFiles(
+        INPUT_FOLDER,
+        outputFolder,
+        TEMP_FOLDER,
+        storyTitle,
+        hookFilePath
+    );
+
+    // Updated function call to move files
+    await moveFilesToArchiveFolder(storyTitle);
 };
 
-const addSilence = (inputPath, outputPath, silenceDurationSec) => {
-    return new Promise((resolve, reject) => {
-        ffmpeg(inputPath)
-            .audioFilters(`apad=pad_dur=${silenceDurationSec}`)
-            .on('end', () => {
-                console.log(
-                    `Silence successfully added to the end of the audio file. File: ${inputPath}. Output: ${outputPath}. Silence: ${silenceDurationSec}s`
-                );
-                resolve(outputPath);
-            })
-            .on('error', (err) => {
-                console.error('An error occurred:', err.message);
-                reject(err);
-            })
-            .save(outputPath);
-    });
-};
+execute();
 
-const concatenateFiles = (inputPaths, outputFolder, tempFolder) => {
-    return new Promise((resolve, reject) => {
-        const concatProcess = ffmpeg();
+// Main processing functions
+async function getAudioFiles(storyOutputFolder, miscOutputFolder, storyObj) {
+    const storyTitle = storyObj['title']['english'];
+    const hookFilePath = path.join(
+        miscOutputFolder,
+        `${Case.snake(storyTitle)}_hook_en.mp3`
+    );
+    await getAudio(storyObj['hook'], hookFilePath);
 
-        // Add intro music
-        concatProcess.input(MUSIC_FILEPATH);
+    const transcriptPath = `${TRANSCRIPTS_FOLDER}/${Case.snake(
+        storyTitle
+    )}.json`;
+    fs.writeFileSync(transcriptPath, JSON.stringify(storyObj, null, 4), 'utf8');
 
-        inputPaths.forEach((file) => {
-            concatProcess.input(file);
-        });
-
-        // Also add intro music to end
-        concatProcess.input(MUSIC_FILEPATH);
-
-        const outputPath = path.join(outputFolder, `final.mp3`);
-
-        concatProcess
-            .on('end', () => {
-                console.log(
-                    `Concatenation completed successfully. Output path: ${outputPath}`
-                );
-                resolve(outputPath);
-            })
-            .on('error', (err) => {
-                console.error(
-                    'An error occurred during concatenation:',
-                    err.message
-                );
-                reject(err);
-            })
-            .mergeToFile(outputPath, outputFolder, tempFolder);
-    });
-};
-
-const extractNumberFromFilename = (filename) => {
-    const match = filename.match(/_(\d+)_/); // Match the number in the format _number_
-    return match ? parseInt(match[1], 10) : 0;
-};
-
-const extractLanguageFromFilename = (filename) => {
-    const match = filename.match(/_(en|sp)/); // Match the language code _en or _sp
-    return match ? match[1] : '';
-};
-
-const sortFilesAsc = (fileA, fileB) => {
-    const numA = extractNumberFromFilename(fileA);
-    const numB = extractNumberFromFilename(fileB);
-    const langA = extractLanguageFromFilename(fileA);
-    const langB = extractLanguageFromFilename(fileB);
-
-    // Sort by number (ascending)
-    if (numA !== numB) {
-        return numA - numB;
+    const storyArr = storyObj['story'];
+    for (let i = 0; i < storyArr.length; i++) {
+        const { english, spanish } = storyArr[i];
+        const fileNameEnglish = path.join(
+            storyOutputFolder,
+            `${Case.snake(storyTitle)}_audio_${i}_en.mp3`
+        );
+        const fileNameSpanish = path.join(
+            storyOutputFolder,
+            `${Case.snake(storyTitle)}_audio_${i}_sp.mp3`
+        );
+        // Spanish first
+        await getAudio(spanish, fileNameSpanish);
+        await getAudio(english, fileNameEnglish);
     }
 
-    // If numbers are the same, prioritize 'sp' before 'en'
-    if (langA !== langB) {
-        return langA === 'sp' ? -1 : 1; // 'sp' comes before 'en'
-    }
+    return { hookFilePath, outputFolder: OUTPUT_FOLDER };
+}
 
-    return 0; // If both number and language are the same, keep original order
-};
-
-const mergeAndProcessAudioFiles = async (
+async function mergeAndProcessAudioFiles(
     inputFolder,
     outputFolder,
-    tempFolder
-) => {
+    tempFolder,
+    storyTitle,
+    hookFilePath
+) {
+    const hookPath_silence = path.join(
+        tempFolder,
+        `silence_${path.basename(hookFilePath)}`
+    );
+    await addSilence(hookFilePath, hookPath_silence, 1.75);
+
+    // Add silence to the hook file
+    await addSilence(hookFilePath, hookPath_silence, 1.75); // Add 1.75 seconds of silence
+    console.log(`Silence added to hook file: ${hookPath_silence}`);
+
     const files = fs
         .readdirSync(inputFolder)
         .filter((file) => file.endsWith('.mp3'))
@@ -194,12 +165,17 @@ const mergeAndProcessAudioFiles = async (
     // Clean up files with silence
     slowSilencePaths_en_sp.forEach((file) => fs.unlinkSync(file));
 
-    const finalOutputPath = path.join(outputFolder, `final_output.mp3`);
+    const finalOutputPath = path.join(
+        outputFolder,
+        `${Case.snake(storyTitle)}_final_output.mp3`
+    );
 
     await mergeFiles(
         [
-            MUSIC_FILEPATH,
+            INTRO_MUSIC_SPEECH_FILEPATH,
+            hookPath_silence,
             spanishSlowMergedShortSilencePath,
+            MUSIC_FILEPATH,
             slowSilenceMergedPath_en_sp,
             MUSIC_FILEPATH,
         ],
@@ -207,12 +183,42 @@ const mergeAndProcessAudioFiles = async (
     );
 
     // Clean up final temporary files
+    fs.unlinkSync(hookPath_silence);
     fs.unlinkSync(spanishSlowMergedShortSilencePath);
     fs.unlinkSync(slowSilenceMergedPath_en_sp);
 
     return finalOutputPath;
-};
+}
 
+async function moveFilesToArchiveFolder(storyTitle) {
+    const storyFolderName = Case.snake(storyTitle);
+    const archiveFolderPath = path.join('./archive', storyFolderName);
+
+    // Create the archive folder if it doesn't exist
+    if (!fs.existsSync(archiveFolderPath)) {
+        fs.mkdirSync(archiveFolderPath, { recursive: true });
+    }
+
+    // Function to move files from a source folder to the archive folder
+    const moveFiles = (sourceFolder) => {
+        const files = fs.readdirSync(sourceFolder);
+        files.forEach((file) => {
+            const sourcePath = path.join(sourceFolder, file);
+            const destPath = path.join(archiveFolderPath, file);
+            fs.renameSync(sourcePath, destPath);
+            console.log(`Moved ${file} to ${archiveFolderPath}`);
+        });
+    };
+
+    // Move files from audio_input and misc_input
+    moveFiles(INPUT_FOLDER);
+    moveFiles(MISC_INPUT_FOLDER);
+    moveFiles(TRANSCRIPTS_FOLDER);
+
+    console.log(`All files moved to ${archiveFolderPath}`);
+}
+
+// Helper functions
 const mergeFiles = (inputPaths, outputPath) => {
     return new Promise((resolve, reject) => {
         const concatProcess = ffmpeg();
@@ -246,45 +252,68 @@ const mergeFiles = (inputPaths, outputPath) => {
     });
 };
 
-const getAudioFiles = async (outputFolder) => {
-    const storyJSON = await llmGenerate();
-    const storyObj = JSON.parse(storyJSON);
-    const storyTitle = storyObj['title']['english'];
-
-    const transcriptPath = `${TRANSCRIPTS_FOLDER}/${Case.snake(
-        storyTitle
-    )}.json`;
-    fs.writeFileSync(transcriptPath, storyJSON, 'utf8', (err) => {
-        if (err) {
-            console.error(`Error writing to file:`, err);
-        } else {
-            console.log(`File saved to ${transcriptPath}`);
-        }
+const changeAudioSpeed = (inputPath, outputPath, speed) => {
+    return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+            .audioFilters(`atempo=${speed}`)
+            .output(outputPath)
+            .on('end', () => {
+                console.log(
+                    `Audio file successfully slowed. File: ${inputPath}. Output: ${outputPath}. Speed: ${speed}`
+                );
+                resolve(outputPath);
+            })
+            .on('error', (err) => {
+                console.error('An error occurred:', err.message);
+                reject(err);
+            })
+            .run();
     });
+};
 
-    const storyArr = storyObj['story'];
-    for (let i = 0; i < storyArr.length; i++) {
-        // for (let i = 0; i < 2; i++) {
-        const { english, spanish } = storyArr[i];
-        const fileNameEnglish = path.join(
-            outputFolder,
-            `${Case.snake(storyTitle)}_audio_${i}_en.mp3`
-        );
-        const fileNameSpanish = path.join(
-            outputFolder,
-            `${Case.snake(storyTitle)}_audio_${i}_sp.mp3`
-        );
-        // Spanish first
-        const outputPathSpanish = await getAudio(spanish, fileNameSpanish);
-        const outputPathEnglish = await getAudio(english, fileNameEnglish);
+const addSilence = (inputPath, outputPath, silenceDurationSec) => {
+    return new Promise((resolve, reject) => {
+        ffmpeg(inputPath)
+            .audioFilters(`apad=pad_dur=${silenceDurationSec}`)
+            .on('end', () => {
+                console.log(
+                    `Silence successfully added to the end of the audio file. File: ${inputPath}. Output: ${outputPath}. Silence: ${silenceDurationSec}s`
+                );
+                resolve(outputPath);
+            })
+            .on('error', (err) => {
+                console.error('An error occurred:', err.message);
+                reject(err);
+            })
+            .save(outputPath);
+    });
+};
 
-        console.log({ outputPathEnglish, outputPathSpanish });
+const extractNumberFromFilename = (filename) => {
+    const match = filename.match(/_(\d+)_/); // Match the number in the format _number_
+    return match ? parseInt(match[1], 10) : 0;
+};
+
+const extractLanguageFromFilename = (filename) => {
+    const match = filename.match(/_(en|sp)/); // Match the language code _en or _sp
+    return match ? match[1] : '';
+};
+
+const sortFilesAsc = (fileA, fileB) => {
+    const numA = extractNumberFromFilename(fileA);
+    const numB = extractNumberFromFilename(fileB);
+    const langA = extractLanguageFromFilename(fileA);
+    const langB = extractLanguageFromFilename(fileB);
+
+    // Sort by number (ascending)
+    if (numA !== numB) {
+        return numA - numB;
     }
-};
 
-const execute = async () => {
-    // await getAudioFiles(INPUT_FOLDER);
-    await mergeAndProcessAudioFiles(INPUT_FOLDER, OUTPUT_FOLDER, TEMP_FOLDER);
-};
+    // If numbers are the same, prioritize 'sp' before 'en'
+    if (langA !== langB) {
+        return langA === 'sp' ? -1 : 1; // 'sp' comes before 'en'
+    }
 
-execute();
+    return 0; // If both number and language are the same, keep original order
+};

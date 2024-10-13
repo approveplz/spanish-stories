@@ -1,43 +1,34 @@
 const OpenAI = require('openai');
+// const dotenv = require('dotenv');
+// dotenv.config();
 
 const execute = async () => {
     const openai = new OpenAI({ apiKey: process.env.OPEN_AI_APIKEY });
 
-    // const plotOutline = await getPlotOutline(openai);
     const plotOutline = await getPlotOutline(
         openai,
-        'The Magic Paintbrush',
-        'A child discovers a paintbrush that brings their drawings to life and must learn how to use it responsibly'
-    );
-    const englishStory = await getEnglishStory(openai, plotOutline);
-    const spanishTranslation = await getSpanishTranslation(
-        openai,
-        englishStory
+        'A Dog with a Dangerous Secret',
+        'When Mia rescues a stray dog, she quickly realizes it can talk! But the dog is hiding a dangerous secret, and now Mia must help him before a group of mysterious people track them down.'
     );
 
-    return spanishTranslation;
+    const englishStory = await getEnglishStory(openai, plotOutline);
+    const storyObj = JSON.parse(
+        await getSpanishTranslation(openai, englishStory)
+    );
+
+    const storyHookObj = JSON.parse(
+        await getStoryMetaDetails(openai, storyObj)
+    );
+    const responseObj = {
+        ...storyObj,
+        ...storyHookObj,
+    };
+
+    return responseObj;
 };
 
-// const getPlotOutline = async (openai) => {
-//     const plotPrompt = `Create a plot outline for an short, exciting fairy tale suitable for children. The outline should follow these key elements:
-
-// 	1.	Opening Hook: Start with an exciting event or detail that grabs attention immediately.
-// 	2.	Main Characters: Describe the main character (hero/heroine) and any important supporting characters.
-// 	3.	Setting: Briefly describe the main setting of the story.
-// 	4.	Inciting Incident: Explain the event that sets the story in motion.
-// 	5.	Main Conflict: Outline the central problem or challenge the hero must overcome.
-// 	6.	Rising Action: Include key events or challenges the hero faces while trying to resolve the main conflict.
-// 	7.	Climax: Describe the most intense or critical moment in the story.
-// 	8.	Resolution: Explain how the conflict is resolved.
-// 	9.	Conclusion: End with a final takeaway or meaningful resolution for the characters.`;
-
-//     const response = await generate(openai, plotPrompt);
-//     console.log(response);
-//     return response;
-// };
-
 const getPlotOutline = async (openai, title, description) => {
-    const plotPrompt = `Create a plot outline for an short, exciting fairy tale suitable for children using PLOT. The outline should follow these key elements:
+    const plotPrompt = `Create a plot outline for an exciting short story for adults learning basic English using PLOT. The outline should follow these key elements:
 
 	1.	Opening Hook: Start with an exciting event or detail that grabs attention immediately.
 	2.	Main Characters: Describe the main character (hero/heroine) and any important supporting characters.
@@ -83,24 +74,7 @@ const getSpanishTranslation = async (openai, englishStory) => {
     return response;
 };
 
-const getEnglishStory = async (openai, plotOutline) => {
-    // const englishStoryPrompt = `Create an exciting and fully fleshed out fairy tale at the A2 level by using points from the PLOT_OUTLINE. Use common words. Do not include any special formating. Start the story with an engaging title.
-
-    const englishStoryPrompt = `Act as an expert in writing captivating children stories, tasked with crafting a young children's story based on a given story PLOT_OUTLINE.
-    Use simple and common words in the story. This is a story for young children.
-    The story must weave a short and simple tale that engages children from the beginning and holds their interest throughout.
-    Your writing should incorporate a plot that quickly unfolds in a compelling manner.
-    Pay special attention to pacing, ensuring that the story progresses smoothly but quickly and keeps the reader eager to find out what happens next.
-    Use simple language and common words.
-
-    PLOT_OUTLINE
-    ${plotOutline}
-    `;
-
-    const response = await generate(openai, englishStoryPrompt);
-    console.log(response);
-    return response;
-};
+// Helpers
 
 const generate = async (openai, userPrompt, jsonOutput = false) => {
     const modelName = 'gpt-4o';
@@ -124,5 +98,69 @@ const generate = async (openai, userPrompt, jsonOutput = false) => {
     const response = completion.choices[0].message.content;
     return response;
 };
+
+const getStoryMetaDetails = async (openai, storyObj) => {
+    const storyTitle = storyObj['title']['spanish'];
+    const story = storyObj['story'];
+
+    const metaDetailsPrompt = `Given STORY_DETAILS, give me an podcast episode STORY_HOOK in one line. 
+    STORY_HOOK should grab the young audience's attention and make them want to listen to the full epsiode.
+    STORY_HOOK should be relevant to and tease the STORY_DETAILS.
+    Respond with JSON.
+    
+    Make sure the story hook always starts with "In this episode," and includes the STORY_TITLE.
+
+    EXAMPLES:
+    In this episode, we bring you El Pincel Mágico, a heartwarming tale about a young artist named Mia and her magical paintbrush that brings her creations to life. 
+    In this episode, discover the enchanting world of Las Estrellas Danzantes, where a brave little girl learns to dance with the stars and save her village from eternal darkness.
+    
+    STORY_DETAILS:
+    ${story}
+
+    STORY_TITLE:
+    ${storyTitle}
+
+    JSON_FORMAT:
+    {
+        'hook': '...'
+    }
+    `;
+
+    const response = await generate(openai, metaDetailsPrompt, true);
+    return response;
+};
+
+const getEnglishStory = async (openai, plotOutline) => {
+    const englishStoryPrompt = `Act as an expert in writing captivating short stories, tasked with crafting a short story based on a given story PLOT_OUTLINE.
+    This is a story to help adults learn basic English. You MUST ONLY use simple and commonly used words in the story.
+    The story must weave a short and simple tale that engages listeners from the beginning and holds their interest throughout.
+    Your writing should incorporate a plot that quickly unfolds in a compelling manner.
+    Pay special attention to pacing, ensuring that the story progresses smoothly but quickly and keeps the listener eager to find out what happens next.
+    Make sure to show, not tell.
+
+    REQUIREMENTS:
+    ONLY use simple and common words for adults learning basic English
+
+    PLOT_OUTLINE
+    ${plotOutline}
+    `;
+
+    const response = await generate(openai, englishStoryPrompt);
+    return response;
+};
+
+// const test = async () => {
+//     const openai = new OpenAI({ apiKey: process.env.OPEN_AI_APIKEY });
+//     const plotOutline = await getPlotOutline(
+//         openai,
+//         'The Magic Paintbrush',
+//         'A child discovers a paintbrush that brings their drawings to life and must learn how to use it responsibly'
+//     );
+//     console.log(plotOutline);
+//     const englishStory = await getEnglishStory(openai, plotOutline);
+//     console.log(englishStory);
+// };
+
+execute();
 
 module.exports = execute;
