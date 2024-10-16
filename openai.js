@@ -1,6 +1,4 @@
 const OpenAI = require('openai');
-// const dotenv = require('dotenv');
-// dotenv.config();
 
 const execute = async (title, description) => {
     const openai = new OpenAI({ apiKey: process.env.OPEN_AI_APIKEY });
@@ -21,6 +19,31 @@ const execute = async (title, description) => {
     };
 
     return responseObj;
+};
+
+// Helpers
+
+const generate = async (openai, userPrompt, jsonOutput = false) => {
+    const modelName = 'gpt-4o';
+    const systemPrompt = `You are an expert story teller`;
+
+    const completion = await openai.chat.completions.create({
+        model: modelName,
+        messages: [
+            {
+                role: 'system',
+                content: systemPrompt,
+            },
+            {
+                role: 'user',
+                content: userPrompt,
+            },
+        ],
+        ...(jsonOutput && { response_format: { type: 'json_object' } }),
+    });
+
+    const response = completion.choices[0].message.content;
+    return response;
 };
 
 const getPlotOutline = async (openai, title, description) => {
@@ -67,31 +90,6 @@ const getSpanishTranslation = async (openai, englishStory) => {
 
     const response = await generate(openai, spanishTranslationPrompt, true);
     console.log(response);
-    return response;
-};
-
-// Helpers
-
-const generate = async (openai, userPrompt, jsonOutput = false) => {
-    const modelName = 'gpt-4o';
-    const systemPrompt = `You are an expert story teller`;
-
-    const completion = await openai.chat.completions.create({
-        model: modelName,
-        messages: [
-            {
-                role: 'system',
-                content: systemPrompt,
-            },
-            {
-                role: 'user',
-                content: userPrompt,
-            },
-        ],
-        ...(jsonOutput && { response_format: { type: 'json_object' } }),
-    });
-
-    const response = completion.choices[0].message.content;
     return response;
 };
 
@@ -145,6 +143,8 @@ const getEnglishStory = async (openai, plotOutline) => {
     return response;
 };
 
+// const dotenv = require('dotenv');
+// dotenv.config();
 // const test = async () => {
 //     const openai = new OpenAI({ apiKey: process.env.OPEN_AI_APIKEY });
 //     const plotOutline = await getPlotOutline(
@@ -156,5 +156,7 @@ const getEnglishStory = async (openai, plotOutline) => {
 //     const englishStory = await getEnglishStory(openai, plotOutline);
 //     console.log(englishStory);
 // };
+
+// test();
 
 module.exports = execute;
