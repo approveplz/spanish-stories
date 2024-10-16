@@ -2,14 +2,10 @@ const OpenAI = require('openai');
 // const dotenv = require('dotenv');
 // dotenv.config();
 
-const execute = async () => {
+const execute = async (title, description) => {
     const openai = new OpenAI({ apiKey: process.env.OPEN_AI_APIKEY });
 
-    const plotOutline = await getPlotOutline(
-        openai,
-        'A Dog with a Dangerous Secret',
-        'When Mia rescues a stray dog, she quickly realizes it can talk! But the dog is hiding a dangerous secret, and now Mia must help him before a group of mysterious people track them down.'
-    );
+    const plotOutline = await getPlotOutline(openai, title, description);
 
     const englishStory = await getEnglishStory(openai, plotOutline);
     const storyObj = JSON.parse(
@@ -160,7 +156,5 @@ const getEnglishStory = async (openai, plotOutline) => {
 //     const englishStory = await getEnglishStory(openai, plotOutline);
 //     console.log(englishStory);
 // };
-
-execute();
 
 module.exports = execute;

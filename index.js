@@ -9,6 +9,7 @@ const path = require('path');
 
 const llmGenerate = require('./openai.js');
 const getAudio = require('./tts.js');
+const uploadPodcast = require('./uploadPodcast.js');
 
 // Set the path to the FFmpeg binary
 const ffmpegPath = require('ffmpeg-static');
@@ -21,27 +22,61 @@ const TRANSCRIPTS_FOLDER = './transcripts';
 const MUSIC_FILEPATH = './assets/theme_music.mp3';
 const INTRO_MUSIC_SPEECH_FILEPATH = './assets/intro_music_with_speech.mp3';
 const MISC_INPUT_FOLDER = './misc_input';
+const LOGO_PATH = './assets/spanish-stories-logo.jpg';
 
 const execute = async () => {
-    const storyObj = await llmGenerate();
+    // Read the stories.json file
+    const storiesPath = path.join('./assets', 'stories.json');
+    let stories = JSON.parse(fs.readFileSync(storiesPath, 'utf8'));
 
-    const storyTitle = storyObj['title']['english'];
+    if (stories.length === 0) {
+        console.log('No more stories in the queue.');
+        return;
+    }
+
+    const firstStory = stories[0];
+    const { title, description } = firstStory;
+
+    const storyObj = await llmGenerate(title, description);
+
+    const storyTitleEnglish = storyObj['title']['english'];
+    const storyTitleSpanish = storyObj['title']['spanish'];
 
     const { hookFilePath, outputFolder } = await getAudioFiles(
         INPUT_FOLDER,
         MISC_INPUT_FOLDER,
         storyObj
     );
-    await mergeAndProcessAudioFiles(
+
+    const finalPodcastPath = await mergeAndProcessAudioFiles(
         INPUT_FOLDER,
         outputFolder,
         TEMP_FOLDER,
-        storyTitle,
+        storyTitleEnglish,
         hookFilePath
     );
 
-    // Updated function call to move files
-    await moveFilesToArchiveFolder(storyTitle);
+    const hook = storyObj['hook'];
+
+    const podcastTitle = `[A1-A2]: ${Case.title(
+        storyTitleEnglish
+    )} - ${Case.title(storyTitleSpanish)}`;
+    const episodeDescription = getEpisodeDescription(hook);
+
+    await uploadPodcast(
+        podcastTitle,
+        finalPodcastPath,
+        LOGO_PATH,
+        episodeDescription
+    );
+
+    // Update stories.json
+    stories.shift();
+    fs.writeFileSync(storiesPath, JSON.stringify(stories, null, 2), 'utf8');
+
+    await uploadPodcast(podcastTitle, finalPodcastPath, LOGO_PATH, description);
+
+    await moveFilesToArchiveFolder(storyTitleEnglish);
 };
 
 execute();
@@ -317,3 +352,12 @@ const sortFilesAsc = (fileA, fileB) => {
 
     return 0; // If both number and language are the same, keep original order
 };
+
+function getEpisodeDescription(hook) {
+    const description = `${hook}
+
+    Whether you're just starting out or refining your fluency, grab your headphones and listen along as we read the story in both Spanish and English.
+    `;
+
+    return description;
+}
