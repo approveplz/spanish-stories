@@ -63,6 +63,15 @@ const execute = async () => {
     )} - ${Case.title(storyTitleSpanish)}`;
     const episodeDescription = getEpisodeDescription(hook);
 
+    storyObj.podcastTitle = podcastTitle;
+    storyObj.episodeDescription = episodeDescription;
+
+    const storyJsonPath = path.join(
+        TRANSCRIPTS_FOLDER,
+        `${Case.snake(storyTitleEnglish)}.json`
+    );
+    fs.writeFileSync(storyJsonPath, JSON.stringify(storyObj, null, 2), 'utf8');
+
     await uploadPodcast(
         podcastTitle,
         finalPodcastPath,
@@ -74,7 +83,8 @@ const execute = async () => {
     stories.shift();
     fs.writeFileSync(storiesPath, JSON.stringify(stories, null, 2), 'utf8');
 
-    await uploadPodcast(podcastTitle, finalPodcastPath, LOGO_PATH, description);
+    // This uploads to Podbean. Using Spotify hosting for now.
+    // await uploadPodcast(podcastTitle, finalPodcastPath, LOGO_PATH, description);
 
     await moveFilesToArchiveFolder(storyTitleEnglish);
 };
@@ -89,11 +99,6 @@ async function getAudioFiles(storyOutputFolder, miscOutputFolder, storyObj) {
         `${Case.snake(storyTitle)}_hook_en.mp3`
     );
     await getAudio(storyObj['hook'], hookFilePath);
-
-    const transcriptPath = `${TRANSCRIPTS_FOLDER}/${Case.snake(
-        storyTitle
-    )}.json`;
-    fs.writeFileSync(transcriptPath, JSON.stringify(storyObj, null, 4), 'utf8');
 
     const storyArr = storyObj['story'];
     for (let i = 0; i < storyArr.length; i++) {
@@ -353,10 +358,15 @@ const sortFilesAsc = (fileA, fileB) => {
     return 0; // If both number and language are the same, keep original order
 };
 
-function getEpisodeDescription(hook) {
+function getEpisodeDescription(hook, spanishTitle) {
     const description = `${hook}
 
-    Whether you're just starting out or refining your fluency, grab your headphones and listen along as we read the story in both Spanish and English.
+    Perfect for language learners, this episode is presented in both Spanish and English, helping you immerse yourself in the beauty of the story while improving your language skills.
+
+    Whether you’re just starting out or looking to refine your fluency, listen along as we read the story in both languages. Grab your headphones and let the magic of ${spanishTitle} inspire your bilingual adventure!
+
+
+    Spanish Level: A1 - A2
     `;
 
     return description;
