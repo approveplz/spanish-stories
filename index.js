@@ -9,7 +9,7 @@ const path = require('path');
 
 const llmGenerate = require('./openai.js');
 const getAudio = require('./tts.js');
-const uploadPodcast = require('./uploadPodcast.js');
+// const uploadPodcast = require('./uploadPodcast.js');
 
 // Set the path to the FFmpeg binary
 const ffmpegPath = require('ffmpeg-static');
@@ -20,13 +20,17 @@ const OUTPUT_FOLDER = './audio_output';
 const TEMP_FOLDER = './temp';
 const TRANSCRIPTS_FOLDER = './transcripts';
 const MUSIC_FILEPATH = './assets/theme_music.mp3';
+const REWIND_FILEPATH = './assets/vinyl_stop_sound_effect.mp3';
+const DING_FILEPATH = './assets/ding_sound_effect.mp3';
 const INTRO_MUSIC_SPEECH_FILEPATH = './assets/intro_music_with_speech.mp3';
 const MISC_INPUT_FOLDER = './misc_input';
 const LOGO_PATH = './assets/spanish-stories-logo.jpg';
 
 const execute = async () => {
-    // Read the stories.json file
-    const storiesPath = path.join('./assets', 'stories.json');
+    // Read the stories from JSON
+    console.log('Reading stories.json');
+    // const storiesPath = path.join('./assets', 'stories.json');
+    const storiesPath = path.join('./assets', 'scary_stories.json');
     let stories = JSON.parse(fs.readFileSync(storiesPath, 'utf8'));
 
     if (stories.length === 0) {
@@ -36,18 +40,35 @@ const execute = async () => {
 
     const firstStory = stories[0];
     const { title, description } = firstStory;
+    console.log(firstStory);
 
+    console.log('Generating story');
     const storyObj = await llmGenerate(title, description);
 
     const storyTitleEnglish = storyObj['title']['english'];
     const storyTitleSpanish = storyObj['title']['spanish'];
 
+    // /* To only generate the story and save it to the transcripts folder */
+    // const storyJsonPathTest = path.join(
+    //     TRANSCRIPTS_FOLDER,
+    //     `${Case.snake(storyTitleEnglish)}.json`
+    // );
+    // fs.writeFileSync(
+    //     storyJsonPathTest,
+    //     JSON.stringify(storyObj, null, 2),
+    //     'utf8'
+    // );
+    // return;
+    // /* */
+
+    console.log('Generating audio files');
     const { hookFilePath, outputFolder } = await getAudioFiles(
         INPUT_FOLDER,
         MISC_INPUT_FOLDER,
         storyObj
     );
 
+    console.log('Merging and processing audio files');
     const finalPodcastPath = await mergeAndProcessAudioFiles(
         INPUT_FOLDER,
         outputFolder,
@@ -69,6 +90,7 @@ const execute = async () => {
     storyObj.podcastTitle = podcastTitle;
     storyObj.episodeDescription = episodeDescription;
 
+    console.log('Saving story to transcripts folder');
     const storyJsonPath = path.join(
         TRANSCRIPTS_FOLDER,
         `${Case.snake(storyTitleEnglish)}.json`
@@ -86,9 +108,11 @@ const execute = async () => {
     // );
 
     // Update stories.json
+    console.log('Updating stories JSON');
     stories.shift();
     fs.writeFileSync(storiesPath, JSON.stringify(stories, null, 2), 'utf8');
 
+    console.log('Moving files to archive folder');
     await moveFilesToArchiveFolder(storyTitleEnglish);
 };
 
@@ -217,8 +241,9 @@ async function mergeAndProcessAudioFiles(
         [
             INTRO_MUSIC_SPEECH_FILEPATH,
             hookPath_silence,
+            DING_FILEPATH,
             spanishSlowMergedShortSilencePath,
-            MUSIC_FILEPATH,
+            REWIND_FILEPATH,
             slowSilenceMergedPath_en_sp,
             MUSIC_FILEPATH,
         ],
