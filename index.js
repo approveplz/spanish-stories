@@ -58,10 +58,13 @@ const execute = async () => {
 
     const hook = storyObj['hook'];
 
-    const podcastTitle = `[A1-A2]: ${Case.title(
+    const podcastTitle = `[A1-A2] ${Case.title(
         storyTitleEnglish
     )} - ${Case.title(storyTitleSpanish)}`;
-    const episodeDescription = getEpisodeDescription(hook);
+    const episodeDescription = getEpisodeDescription(
+        hook,
+        Case.title(storyTitleSpanish)
+    );
 
     storyObj.podcastTitle = podcastTitle;
     storyObj.episodeDescription = episodeDescription;
@@ -72,19 +75,19 @@ const execute = async () => {
     );
     fs.writeFileSync(storyJsonPath, JSON.stringify(storyObj, null, 2), 'utf8');
 
-    await uploadPodcast(
-        podcastTitle,
-        finalPodcastPath,
-        LOGO_PATH,
-        episodeDescription
-    );
+    /* 
+    This uploads to Podbean. Using Spotify hosting for now.
+    */
+    // await uploadPodcast(
+    //     podcastTitle,
+    //     finalPodcastPath,
+    //     LOGO_PATH,
+    //     episodeDescription
+    // );
 
     // Update stories.json
     stories.shift();
     fs.writeFileSync(storiesPath, JSON.stringify(stories, null, 2), 'utf8');
-
-    // This uploads to Podbean. Using Spotify hosting for now.
-    // await uploadPodcast(podcastTitle, finalPodcastPath, LOGO_PATH, description);
 
     await moveFilesToArchiveFolder(storyTitleEnglish);
 };
@@ -359,15 +362,7 @@ const sortFilesAsc = (fileA, fileB) => {
 };
 
 function getEpisodeDescription(hook, spanishTitle) {
-    const description = `${hook}
-
-    Perfect for language learners, this episode is presented in both Spanish and English, helping you immerse yourself in the beauty of the story while improving your language skills.
-
-    Whether you’re just starting out or looking to refine your fluency, listen along as we read the story in both languages. Grab your headphones and let the magic of ${spanishTitle} inspire your bilingual adventure!
-
-
-    Spanish Level: A1 - A2
-    `;
+    const description = `${hook} Perfect for language learners, this episode is presented in both Spanish and English, helping you immerse yourself in the beauty of the story while improving your language skills. Whether you’re just starting out or looking to refine your fluency, listen along as we read the story in both languages. Grab your headphones and let the magic of ${spanishTitle} inspire your bilingual adventure! Spanish Level: A1 - A2`;
 
     return description;
 }
