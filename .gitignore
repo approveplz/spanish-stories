@@ -4,7 +4,7 @@
 
 .DS_Store
 
-# Audio files
+# Folders to ignore
 /audio_input
 /audio_output
 /temp
@@ -12,3 +12,5 @@
 /archive
 /misc_input
 /transcripts
+/video_input
+/video_output
