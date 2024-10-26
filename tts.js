@@ -6,15 +6,22 @@ const client = new ElevenLabsClient({
 });
 
 const createAudioFileFromText = async (text, fileName) => {
-    const VOICE = '2Lb1en5ujrODDIqmp7F3'; // Jhenny Antiques - Calm, Soft and Sweet
+    const VOICE_JHENNNY_SPANISH_FEMALE = '2Lb1en5ujrODDIqmp7F3'; // Jhenny Antiques - Calm, Soft and Sweet
+    // const VOICE_LUIS_SPANISH_MALE = 'KuCuu213C5LmCbAvbEb8'; // Luis - Spanish Male. This one is not good
     const MODEL_ID = 'eleven_multilingual_v2';
 
     return new Promise(async (resolve, reject) => {
         try {
             const audio = await client.generate({
-                voice: VOICE,
+                voice: VOICE_JHENNNY_SPANISH_FEMALE,
                 model_id: MODEL_ID,
                 text,
+                voice_settings: {
+                    stability: 0.5,
+                    similarity_boost: 0.7,
+                    style: 0.5,
+                    use_speaker_boost: true,
+                },
             });
             const fileStream = fs.createWriteStream(fileName);
             audio.pipe(fileStream);
