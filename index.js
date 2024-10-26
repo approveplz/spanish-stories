@@ -26,11 +26,23 @@ const INTRO_MUSIC_SPEECH_FILEPATH = './assets/intro_music_with_speech.mp3';
 const MISC_INPUT_FOLDER = './misc_input';
 const LOGO_PATH = './assets/spanish-stories-logo.jpg';
 
+/*
+Video generation
+*/
+
+const {
+    createImageWithDynamicText,
+    createVideoFromImagesAndAudio,
+} = require('./generateVideo');
+
+const OUTPUT_IMAGES_FOLDER = './video_input';
+const OUTPUT_VIDEO_FOLDER = './video_output';
+
 const execute = async () => {
     // Read the stories from JSON
     console.log('Reading stories.json');
-    // const storiesPath = path.join('./assets', 'stories.json');
-    const storiesPath = path.join('./assets', 'scary_stories.json');
+    const storiesPath = path.join('./assets', 'stories.json');
+    // const storiesPath = path.join('./assets', 'scary_stories.json');
     let stories = JSON.parse(fs.readFileSync(storiesPath, 'utf8'));
 
     if (stories.length === 0) {
@@ -117,6 +129,66 @@ const execute = async () => {
 };
 
 execute();
+
+const storyObj = JSON.parse(
+    fs.readFileSync('./transcripts/a_silent_melody.json', 'utf8')
+);
+
+// generateVideo(storyObj, TEMP_FOLDER, OUTPUT_IMAGES_FOLDER, OUTPUT_VIDEO_FOLDER);
+
+async function generateVideo(
+    storyObj,
+    tempFolder,
+    outputImagesFolder,
+    outputVideoFolder
+) {
+    const storyArr = storyObj['story'];
+
+    const imagePaths = await Promise.all(
+        storyArr.map(async ({ spanish }, i) => {
+            console.log({ i, spanish });
+            return await createImageWithDynamicText(
+                spanish,
+                i,
+                outputImagesFolder
+            );
+        })
+    );
+
+    // need to filter to just get short silence slowed or something
+    const files = fs
+        .readdirSync(tempFolder)
+        .sort(sortFilesAsc)
+        .filter((file) => file.endsWith('.mp3'));
+
+    const spanishFiles = files.filter(
+        (file) => extractLanguageFromFilename(file) === 'sp'
+    );
+
+    const spanishDurations = await Promise.all(
+        spanishFiles.map(async (file) => {
+            const duration = await getAudioDuration(
+                path.join(tempFolder, file)
+            );
+            console.log({ file, duration });
+            return duration;
+        })
+    );
+
+    const audioPath = path.join(
+        tempFolder,
+        'spanish_slow_merged_short_silence.mp3'
+    );
+
+    console.log(spanishDurations);
+
+    await createVideoFromImagesAndAudio(
+        imagePaths,
+        audioPath,
+        spanishDurations,
+        outputVideoFolder
+    );
+}
 
 // Main processing functions
 async function getAudioFiles(storyOutputFolder, miscOutputFolder, storyObj) {
@@ -207,7 +279,8 @@ async function mergeAndProcessAudioFiles(
     );
 
     // Clean up Spanish files with short silence
-    spanishFilesWithSilence.forEach((file) => fs.unlinkSync(file));
+    // Leave these in the temp folder to test video generation
+    // spanishFilesWithSilence.forEach((file) => fs.unlinkSync(file));
 
     const slowSilencePaths_en_sp = await Promise.all(
         slowedPaths_en_sp.map(async (file) => {
@@ -251,9 +324,9 @@ async function mergeAndProcessAudioFiles(
     );
 
     // Clean up final temporary files
-    fs.unlinkSync(hookPath_silence);
-    fs.unlinkSync(spanishSlowMergedShortSilencePath);
-    fs.unlinkSync(slowSilenceMergedPath_en_sp);
+    // fs.unlinkSync(hookPath_silence);
+    // fs.unlinkSync(spanishSlowMergedShortSilencePath);
+    // fs.unlinkSync(slowSilenceMergedPath_en_sp);
 
     return finalOutputPath;
 }
@@ -287,7 +360,7 @@ async function moveFilesToArchiveFolder(storyTitle) {
 }
 
 // Helper functions
-const mergeFiles = (inputPaths, outputPath) => {
+function mergeFiles(inputPaths, outputPath) {
     return new Promise((resolve, reject) => {
         const concatProcess = ffmpeg();
 
@@ -318,9 +391,9 @@ const mergeFiles = (inputPaths, outputPath) => {
             })
             .mergeToFile(outputPath, path.dirname(outputPath));
     });
-};
+}
 
-const changeAudioSpeed = (inputPath, outputPath, speed) => {
+function changeAudioSpeed(inputPath, outputPath, speed) {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
             .audioFilters(`atempo=${speed}`)
@@ -337,9 +410,9 @@ const changeAudioSpeed = (inputPath, outputPath, speed) => {
             })
             .run();
     });
-};
+}
 
-const addSilence = (inputPath, outputPath, silenceDurationSec) => {
+function addSilence(inputPath, outputPath, silenceDurationSec) {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
             .audioFilters(`apad=pad_dur=${silenceDurationSec}`)
@@ -355,19 +428,19 @@ const addSilence = (inputPath, outputPath, silenceDurationSec) => {
             })
             .save(outputPath);
     });
-};
+}
 
-const extractNumberFromFilename = (filename) => {
+function extractNumberFromFilename(filename) {
     const match = filename.match(/_(\d+)_/); // Match the number in the format _number_
     return match ? parseInt(match[1], 10) : 0;
-};
+}
 
-const extractLanguageFromFilename = (filename) => {
+function extractLanguageFromFilename(filename) {
     const match = filename.match(/_(en|sp)/); // Match the language code _en or _sp
     return match ? match[1] : '';
-};
+}
 
-const sortFilesAsc = (fileA, fileB) => {
+function sortFilesAsc(fileA, fileB) {
     const numA = extractNumberFromFilename(fileA);
     const numB = extractNumberFromFilename(fileB);
     const langA = extractLanguageFromFilename(fileA);
@@ -384,10 +457,19 @@ const sortFilesAsc = (fileA, fileB) => {
     }
 
     return 0; // If both number and language are the same, keep original order
-};
+}
 
 function getEpisodeDescription(hook, spanishTitle) {
     const description = `${hook} Perfect for language learners, this episode is presented in both Spanish and English, helping you immerse yourself in the beauty of the story while improving your language skills. Whether you’re just starting out or looking to refine your fluency, listen along as we read the story in both languages. Grab your headphones and let the magic of ${spanishTitle} inspire your bilingual adventure! Spanish Level: A1 - A2`;
 
     return description;
+}
+
+function getAudioDuration(audioPath) {
+    return new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(audioPath, (err, metadata) => {
+            if (err) return reject(err);
+            resolve(metadata.format.duration);
+        });
+    });
 }
