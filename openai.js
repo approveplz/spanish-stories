@@ -47,11 +47,17 @@ const generate = async (openai, userPrompt, jsonOutput = false) => {
 };
 
 const getPlotOutline = async (openai, title, description) => {
-    const name = getRandomSpanishName();
+    let nameMain = getRandomSpanishName();
+    let nameSupport;
+
+    do {
+        nameSupport = getRandomSpanishName();
+    } while (nameSupport !== nameMain);
+
     const plotPrompt = `Create a plot outline for an exciting short story for adults learning basic English using PLOT. The outline should follow these key elements:
 
 	1.	Opening Hook: Start with an exciting event or detail that grabs attention immediately.
-	2.	Main Characters: Describe the main character (hero/heroine) and any important supporting characters. Use a few characters as possible. Use the name "${name}" for the main character
+	2.	Main Characters: Describe the main character (hero/heroine) and any important supporting characters. Use a few characters as possible. Use the name "${nameMain}" for the main character. If there is a supporting character, use the name "${nameSupport}" for the supporting character.
 	3.	Setting: Briefly describe the main setting of the story.
 	4.	Inciting Incident: Explain the event that sets the story in motion.
 	5.	Main Conflict: Outline the central problem or challenge the hero must overcome.
