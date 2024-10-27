@@ -1,5 +1,7 @@
 const ffmpeg = require('fluent-ffmpeg');
 const Case = require('case');
+const videoshow = require('videoshow');
+const { createCanvas, loadImage } = require('canvas');
 
 const { config } = require('dotenv');
 config();
@@ -25,15 +27,6 @@ const DING_FILEPATH = './assets/ding_sound_effect.mp3';
 const INTRO_MUSIC_SPEECH_FILEPATH = './assets/intro_music_with_speech.mp3';
 const MISC_INPUT_FOLDER = './misc_input';
 const LOGO_PATH = './assets/spanish-stories-logo.jpg';
-
-/*
-Video generation
-*/
-
-const {
-    createImageWithDynamicText,
-    createVideoFromImagesAndAudio,
-} = require('./generateVideo');
 
 const OUTPUT_IMAGES_FOLDER = './video_input';
 const OUTPUT_VIDEO_FOLDER = './video_output';
@@ -144,50 +137,96 @@ async function generateVideo(
 ) {
     const storyArr = storyObj['story'];
 
-    const imagePaths = await Promise.all(
-        storyArr.map(async ({ spanish }, i) => {
-            console.log({ i, spanish });
-            return await createImageWithDynamicText(
-                spanish,
+    console.log('Generating images');
+    const imagePaths_en_sp = await Promise.all(
+        storyArr.map(
+            async ({ english: englishText, spanish: spanishText }, i) => {
+                console.log({ i, englishText, spanishText });
+                const spanishPath = await createImageWithDynamicText(
+                    spanishText,
                 i,
-                outputImagesFolder
-            );
-        })
-    );
+                    outputImagesFolder,
+                    'sp'
+                );
+                const englishPath = await createImageWithDynamicText(
+                    englishText,
+                    i,
+                    outputImagesFolder,
+                    'en'
+                );
+                return [spanishPath, englishPath];
+            }
+        )
+    ).then((paths) => paths.flat());
+    console.log('Image paths generated');
 
-    // need to filter to just get short silence slowed or something
-    const files = fs
+    const files_en_sp = fs
         .readdirSync(tempFolder)
         .sort(sortFilesAsc)
-        .filter((file) => file.endsWith('.mp3'));
+        .filter(
+            (file) =>
+                file.endsWith('.mp3') &&
+                file.includes('silence_slowed') &&
+                file.includes('audio')
+        );
 
-    const spanishFiles = files.filter(
-        (file) => extractLanguageFromFilename(file) === 'sp'
+    const durations_en_sp = {};
+
+    console.log('Getting audio durations');
+    for (const file of files_en_sp) {
+        const language = extractLanguageFromFilename(file);
+        const index = extractNumberFromFilename(file);
+        const duration = await getAudioDuration(path.join(tempFolder, file));
+
+        if (!durations_en_sp[index]) {
+            durations_en_sp[index] = {};
+        }
+
+        durations_en_sp[index][language] = duration;
+    }
+    console.log('Audio durations retrieved');
+    // const spanishFiles = files.filter(
+    //     (file) => extractLanguageFromFilename(file) === 'sp'
+    // );
+
+    // const spanishDurations = durations
+    //     .filter(({ language }) => language === 'sp')
+    //     .map(({ duration }) => duration);
+
+    const audioFileName_sp = 'slow_silence_merged_sp.mp3';
+    const audioPath_sp = path.join(tempFolder, audioFileName_sp);
+
+    const audioFileName_en_sp = 'slow_silence_merged_en_sp.mp3';
+    const audioPath_en_sp = path.join(tempFolder, audioFileName_en_sp);
+
+    const imagePaths_sp = imagePaths_en_sp.filter(
+        (filePath) =>
+            extractLanguageFromFilename(path.basename(filePath)) === 'sp'
     );
 
-    const spanishDurations = await Promise.all(
-        spanishFiles.map(async (file) => {
-            const duration = await getAudioDuration(
-                path.join(tempFolder, file)
-            );
-            console.log({ file, duration });
-            return duration;
-        })
+    // const imagePaths_en_sp = imagePathsObjs_en_sp.map(
+    //     ({ english: englishPath }) => {
+    //         return englishPath;
+    //     }
+    // );
+
+    const storyTitleEnglish = storyObj['title']['english'];
+
+    const videoPath_en_sp = await createVideoFromImagesAndAudio(
+        imagePaths_en_sp,
+        audioPath_en_sp,
+        durations_en_sp,
+        outputVideoFolder,
+        `video_${Case.snake(storyTitleEnglish)}_en_sp.mp4`
     );
 
-    const audioPath = path.join(
-        tempFolder,
-        'spanish_slow_merged_short_silence.mp3'
-    );
-
-    console.log(spanishDurations);
-
-    await createVideoFromImagesAndAudio(
-        imagePaths,
-        audioPath,
-        spanishDurations,
-        outputVideoFolder
-    );
+    // const videoPath_sp = await createVideoFromImagesAndAudio(
+    //     imagePaths_sp,
+    //     audioPath_sp,
+    //     durations_en_sp,
+    //     outputVideoFolder,
+    //     `video_${Case.snake(storyTitleEnglish)}_sp.mp4`
+    // );
 }
 
 // Main processing functions
@@ -359,6 +398,160 @@ async function moveFilesToArchiveFolder(storyTitle) {
     console.log(`All files moved to ${archiveFolderPath}`);
 }
 
+// Video generation helper functions
+
+async function createImageWithDynamicText(
+    text,
+    frameNumber,
+    outputFolder,
+    language,
+    backgroundImagePath = null // Make backgroundImagePath optional
+) {
+    const width = 1920;
+    const height = 1080;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+
+    if (backgroundImagePath) {
+        // Load and draw the background image if provided
+        const backgroundImage = await loadImage(backgroundImagePath);
+        ctx.drawImage(backgroundImage, 0, 0, width, height);
+    } else {
+        // Use yellow background if no image path is provided
+        ctx.fillStyle = 'yellow';
+        ctx.fillRect(0, 0, width, height);
+    }
+
+    // Set a fixed font size
+    const fontSize = 80;
+    ctx.font = `${fontSize}px Arial`;
+    ctx.fillStyle = 'white'; // Changed to white for better visibility on images
+    ctx.strokeStyle = 'black'; // Add an outline to make text more readable
+    ctx.lineWidth = 4; // Increase the line width for a thicker outline
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const wrapText = (
+        context,
+        text,
+        centerX,
+        centerY,
+        maxWidth,
+        lineHeight
+    ) => {
+        const words = text.split(' ');
+        let currentLine = '';
+        const wrappedLines = [];
+
+        words.forEach((word) => {
+            const testLine = currentLine + (currentLine ? ' ' : '') + word;
+            const { width: testWidth } = context.measureText(testLine);
+
+            if (testWidth > maxWidth && currentLine) {
+                wrappedLines.push(currentLine);
+                currentLine = word;
+            } else {
+                currentLine = testLine;
+            }
+        });
+        if (currentLine) {
+            wrappedLines.push(currentLine);
+        }
+
+        const totalTextHeight = wrappedLines.length * lineHeight;
+        const startY = centerY - totalTextHeight / 2;
+
+        wrappedLines.forEach((line, index) => {
+            const lineY = startY + index * lineHeight;
+            context.strokeText(line, centerX, lineY);
+            context.fillText(line, centerX, lineY);
+        });
+    };
+
+    const lineHeight = fontSize * 1.2;
+    wrapText(ctx, text, width / 2, height / 2, width * 0.8, lineHeight);
+
+    const filePath = path.join(
+        outputFolder,
+        `frame_${language}_${frameNumber}.png`
+    );
+    fs.writeFileSync(filePath, canvas.toBuffer('image/png'));
+    return filePath;
+}
+
+async function createVideoFromImagesAndAudio(
+    imagePaths,
+    audioPath,
+    durations,
+    outputFolder,
+    outputFileName
+) {
+    console.log(`Creating video from images and audio for ${outputFileName}`);
+    // const outputFileName = `output-video.mp4`;
+    const outputPath = path.join(outputFolder, outputFileName);
+
+    // Create image objects for videoshow
+    const videoshowImageObjs = imagePaths.map((imagePath) => {
+        const fileName = path.basename(imagePath);
+        const index = extractNumberFromFilename(fileName);
+        const language = extractLanguageFromFilename(fileName);
+
+        if (!durations[index] || !durations[index][language]) {
+            throw new Error(
+                `Missing duration for index ${index}, language ${language}`
+            );
+        }
+
+        return {
+            path: imagePath,
+            loop: durations[index][language],
+        };
+    });
+
+    const videoOptions = {
+        fps: 30,
+        transition: false,
+        videoBitrate: 1024,
+        videoCodec: 'libx264',
+        size: '1920x1080',
+        outputOptions: ['-preset ultrafast', '-pix_fmt yuv420p'],
+        format: 'mp4',
+    };
+
+    console.log('Starting video generation...');
+    console.log('Images:', imagePaths);
+    console.log('Audio file:', audioPath);
+    console.log('Output:', outputPath);
+
+    return new Promise((resolve, reject) => {
+        videoshow(videoshowImageObjs, videoOptions)
+            .audio(audioPath, { fade: false })
+            .save(outputPath)
+            .on('start', (command) => {
+                // console.log('FFmpeg process started:', command);
+                console.log('FFmpeg process started');
+            })
+            .on('error', (err, stdout, stderr) => {
+                console.error('Error:', err);
+                console.error('ffmpeg stderr:', stderr);
+                reject(err);
+            })
+            .on('end', (output) => {
+                console.log('Video created successfully:', output);
+                resolve(outputPath);
+            });
+    });
+}
+
+function getAudioDuration(audioPath) {
+    return new Promise((resolve, reject) => {
+        ffmpeg.ffprobe(audioPath, (err, metadata) => {
+            if (err) return reject(err);
+            resolve(metadata.format.duration);
+        });
+    });
+}
+
 // Helper functions
 function mergeFiles(inputPaths, outputPath) {
     return new Promise((resolve, reject) => {
@@ -399,9 +592,6 @@ function changeAudioSpeed(inputPath, outputPath, speed) {
             .audioFilters(`atempo=${speed}`)
             .output(outputPath)
             .on('end', () => {
-                console.log(
-                    `Audio file successfully slowed. File: ${inputPath}. Output: ${outputPath}. Speed: ${speed}`
-                );
                 resolve(outputPath);
             })
             .on('error', (err) => {
@@ -417,9 +607,6 @@ function addSilence(inputPath, outputPath, silenceDurationSec) {
         ffmpeg(inputPath)
             .audioFilters(`apad=pad_dur=${silenceDurationSec}`)
             .on('end', () => {
-                console.log(
-                    `Silence successfully added to the end of the audio file. File: ${inputPath}. Output: ${outputPath}. Silence: ${silenceDurationSec}s`
-                );
                 resolve(outputPath);
             })
             .on('error', (err) => {
@@ -463,13 +650,4 @@ function getEpisodeDescription(hook, spanishTitle) {
     const description = `${hook} Perfect for language learners, this episode is presented in both Spanish and English, helping you immerse yourself in the beauty of the story while improving your language skills. Whether you’re just starting out or looking to refine your fluency, listen along as we read the story in both languages. Grab your headphones and let the magic of ${spanishTitle} inspire your bilingual adventure! Spanish Level: A1 - A2`;
 
     return description;
-}
-
-function getAudioDuration(audioPath) {
-    return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(audioPath, (err, metadata) => {
-            if (err) return reject(err);
-            resolve(metadata.format.duration);
-        });
-    });
 }
