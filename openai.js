@@ -47,10 +47,11 @@ const generate = async (openai, userPrompt, jsonOutput = false) => {
 };
 
 const getPlotOutline = async (openai, title, description) => {
+    const name = getRandomSpanishName();
     const plotPrompt = `Create a plot outline for an exciting short story for adults learning basic English using PLOT. The outline should follow these key elements:
 
 	1.	Opening Hook: Start with an exciting event or detail that grabs attention immediately.
-	2.	Main Characters: Describe the main character (hero/heroine) and any important supporting characters. Use a few characters as possible.
+	2.	Main Characters: Describe the main character (hero/heroine) and any important supporting characters. Use a few characters as possible. Use the name "${name}" for the main character
 	3.	Setting: Briefly describe the main setting of the story.
 	4.	Inciting Incident: Explain the event that sets the story in motion.
 	5.	Main Conflict: Outline the central problem or challenge the hero must overcome.
@@ -287,6 +288,117 @@ const getEnglishStory = async (openai, plotOutline) => {
 //     const response = await generate(openai, englishStoryPrompt);
 //     return response;
 // };
+
+const getRandomSpanishName = () => {
+    const names = [
+        'Miguel',
+        'Sofia',
+        'Diego',
+        'Isabella',
+        'Alejandro',
+        'Valentina',
+        'Carlos',
+        'Camila',
+        'Javier',
+        'Lucia',
+        'Mateo',
+        'Gabriela',
+        'Antonio',
+        'Elena',
+        'Fernando',
+        'Mariana',
+        'Rafael',
+        'Daniela',
+        'Emilio',
+        'Ana',
+        'Luis',
+        'Carmen',
+        'Jorge',
+        'Paula',
+        'Pedro',
+        'Laura',
+        'Ricardo',
+        'Andrea',
+        'Manuel',
+        'Beatriz',
+        'Francisco',
+        'Adriana',
+        'Alberto',
+        'Natalia',
+        'Eduardo',
+        'Silvia',
+        'Mario',
+        'Patricia',
+        'Raul',
+        'Monica',
+        'Oscar',
+        'Claudia',
+        'Guillermo',
+        'Rosa',
+        'Sergio',
+        'Julia',
+        'Victor',
+        'Alicia',
+        'Roberto',
+        'Cristina',
+        'Enrique',
+        'Marta',
+        'Felipe',
+        'Teresa',
+        'Andres',
+        'Pilar',
+        'Ramon',
+        'Isabel',
+        'Jaime',
+        'Susana',
+        'Gustavo',
+        'Carla',
+        'Arturo',
+        'Veronica',
+        'Hector',
+        'Lorena',
+        'Salvador',
+        'Elisa',
+        'Marco',
+        'Cecilia',
+        'Ignacio',
+        'Ines',
+        'Julio',
+        'Lourdes',
+        'Alfredo',
+        'Rocio',
+        'Ernesto',
+        'Catalina',
+        'Hugo',
+        'Esther',
+        'Esteban',
+        'Nuria',
+        'Tomas',
+        'Olga',
+        'Agustin',
+        'Miriam',
+        'Lorenzo',
+        'Yolanda',
+        'Rodrigo',
+        'Sonia',
+        'Pablo',
+        'Irene',
+        'Armando',
+        'Eugenia',
+        'Gerardo',
+        'Marisol',
+        'Alvaro',
+        'Consuelo',
+        'Ruben',
+        'Dolores',
+        'Cesar',
+        'Josefina',
+        'Mauricio',
+        'Luisa',
+    ];
+
+    return names[Math.floor(Math.random() * names.length)];
+};
 
 // const dotenv = require('dotenv');
 // dotenv.config();
