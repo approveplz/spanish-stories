@@ -17,9 +17,9 @@ const createAudioFileFromText = async (text, fileName) => {
                 model_id: MODEL_ID,
                 text,
                 voice_settings: {
-                    stability: 0.5,
+                    stability: 0.3,
                     similarity_boost: 0.7,
-                    style: 0.5,
+                    style: 0.6,
                     use_speaker_boost: true,
                 },
             });
