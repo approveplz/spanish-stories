@@ -32,77 +32,71 @@ const OUTPUT_IMAGES_FOLDER = './video_input';
 const OUTPUT_VIDEO_FOLDER = './video_output';
 
 const execute = async () => {
-    // // Read the stories from JSON
-    // console.log('Reading stories.json');
+    // Read the stories from JSON
+    console.log('Reading stories.json');
+    const storiesPath = path.join('./assets', 'stories_everyday.json');
     // const storiesPath = path.join('./assets', 'stories.json');
-    // // const storiesPath = path.join('./assets', 'scary_stories.json');
-    // let stories = JSON.parse(fs.readFileSync(storiesPath, 'utf8'));
+    // const storiesPath = path.join('./assets', 'scary_stories.json');
+    let stories = JSON.parse(fs.readFileSync(storiesPath, 'utf8'));
 
-    // if (stories.length === 0) {
-    //     console.log('No more stories in the queue.');
-    //     return;
-    // }
+    if (stories.length === 0) {
+        console.log('No more stories in the queue.');
+        return;
+    }
 
-    // const firstStory = stories[0];
-    // const { title, description } = firstStory;
-    // console.log(firstStory);
+    const firstStory = stories[0];
+    const { title, description } = firstStory;
+    console.log(firstStory);
 
-    // console.log('Generating story');
-    // const storyObj = await llmGenerate(title, description);
+    console.log('Generating story');
+    const storyObj = await llmGenerate(title, description);
 
-    // const storyTitleEnglish = storyObj['title']['english'];
-    // const storyTitleSpanish = storyObj['title']['spanish'];
+    const storyTitleEnglish = storyObj['title']['english'];
+    const storyTitleSpanish = storyObj['title']['spanish'];
 
-    // // /* To only generate the story and save it to the transcripts folder */
-    // // const storyJsonPathTest = path.join(
-    // //     TRANSCRIPTS_FOLDER,
-    // //     `${Case.snake(storyTitleEnglish)}.json`
-    // // );
-    // // fs.writeFileSync(
-    // //     storyJsonPathTest,
-    // //     JSON.stringify(storyObj, null, 2),
-    // //     'utf8'
-    // // );
-    // // return;
-    // // /* */
-
-    // console.log('Generating audio files');
-    // const { hookFilePath, outputFolder } = await getAudioFiles(
-    //     INPUT_AUDIO_FOLDER,
-    //     MISC_INPUT_FOLDER,
-    //     storyObj
-    // );
-
-    // // Generate and save transcript metadata
-    // const hook = storyObj['hook'];
-    // const podcastTitle = `[A2-B1] ${Case.title(
-    //     storyTitleEnglish
-    // )} - ${Case.title(storyTitleSpanish)}`;
-    // const episodeDescription = getEpisodeDescription(
-    //     hook,
-    //     Case.title(storyTitleSpanish)
-    // );
-
-    // storyObj.podcastTitle = podcastTitle;
-    // storyObj.episodeDescription = episodeDescription;
-
-    // console.log('Saving story to transcripts folder');
-    // const storyJsonPath = path.join(
+    // /* To only generate the story and save it to the transcripts folder */
+    // const storyJsonPathTest = path.join(
     //     TRANSCRIPTS_FOLDER,
     //     `${Case.snake(storyTitleEnglish)}.json`
     // );
-    // fs.writeFileSync(storyJsonPath, JSON.stringify(storyObj, null, 2), 'utf8');
+    // fs.writeFileSync(
+    //     storyJsonPathTest,
+    //     JSON.stringify(storyObj, null, 2),
+    //     'utf8'
+    // );
+    // return;
+    // /* */
 
-    // testing
-    const hookFilePath =
-        '/Users/alanzhang/dev/spanish-stories/misc_input/the_whales_song_hook_en.mp3';
+    console.log('Generating audio files');
+    const { hookFilePath, outputFolder } = await getAudioFiles(
+        INPUT_AUDIO_FOLDER,
+        MISC_INPUT_FOLDER,
+        storyObj
+    );
 
-    const outputFolder = OUTPUT_AUDIO_FOLDER;
-    const storyTitleEnglish = 'The Whales Song';
+    // Generate and save transcript metadata
+    const hook = storyObj['hook'];
+    const podcastTitle = `[A2-B1] ${Case.title(
+        storyTitleEnglish
+    )} - ${Case.title(storyTitleSpanish)}`;
+    const episodeDescription = getEpisodeDescription(
+        hook,
+        Case.title(storyTitleSpanish)
+    );
+
+    storyObj.podcastTitle = podcastTitle;
+    storyObj.episodeDescription = episodeDescription;
+
+    console.log('Saving story to transcripts folder');
+    const storyJsonPath = path.join(
+        TRANSCRIPTS_FOLDER,
+        `${Case.snake(storyTitleEnglish)}.json`
+    );
+    fs.writeFileSync(storyJsonPath, JSON.stringify(storyObj, null, 2), 'utf8');
 
     // Create the final files
     console.log('Merging and processing audio files');
-    const finalPodcastPath = await mergeAndProcessAudioFiles(
+    const finalAudioPath = await mergeAndProcessAudioFiles(
         INPUT_AUDIO_FOLDER,
         outputFolder,
         TEMP_AUDIO_FOLDER,
@@ -116,6 +110,22 @@ const execute = async () => {
         OUTPUT_IMAGES_FOLDER,
         OUTPUT_VIDEO_FOLDER
     );
+
+    // Clean up temp folder
+    console.log('Cleaning up temp folder...');
+    const tempFiles = fs.readdirSync(TEMP_AUDIO_FOLDER);
+    tempFiles.forEach((file) => {
+        const filePath = path.join(TEMP_AUDIO_FOLDER, file);
+        fs.unlinkSync(filePath);
+    });
+
+    // Clean up misc input folder
+    console.log('Cleaning up misc input folder...');
+    const miscFiles = fs.readdirSync(MISC_INPUT_FOLDER);
+    miscFiles.forEach((file) => {
+        const filePath = path.join(MISC_INPUT_FOLDER, file);
+        fs.unlinkSync(filePath);
+    });
 
     /* 
     This uploads to Podbean. Using Spotify hosting for now.
@@ -132,13 +142,31 @@ const execute = async () => {
     stories.shift();
     fs.writeFileSync(storiesPath, JSON.stringify(stories, null, 2), 'utf8');
 
-    // await moveFilesToArchiveFolder(storyTitleEnglish);
+    // Clean up input audio folder
+    console.log('Cleaning up input audio folder...');
+    const inputAudioFiles = fs.readdirSync(INPUT_AUDIO_FOLDER);
+    inputAudioFiles.forEach((file) => {
+        const filePath = path.join(INPUT_AUDIO_FOLDER, file);
+        fs.unlinkSync(filePath);
+    });
+
+    await moveFilesToArchiveFolder(storyTitleEnglish);
 };
 
 execute();
 
 // const storyObj = JSON.parse(
-//     fs.readFileSync('./transcripts/the_whales_song.json', 'utf8')
+//     fs.readFileSync(
+//         './transcripts/_title_a_puzzling_mystery_at_the_mall.json',
+//         'utf8'
+//     )
+// );
+
+// generateVideo(
+//     storyObj,
+//     TEMP_AUDIO_FOLDER,
+//     OUTPUT_IMAGES_FOLDER,
+//     OUTPUT_VIDEO_FOLDER
 // );
 
 async function generateVideo(
@@ -180,6 +208,20 @@ async function generateVideo(
             `video_${Case.snake(storyTitleEnglish)}_final.mp4`
         )
     );
+    // Clean up image files
+    console.log('Cleaning up image files');
+    const imageFiles = fs.readdirSync(outputImagesFolder);
+    imageFiles.forEach((file) => {
+        const filePath = path.join(outputImagesFolder, file);
+        fs.unlinkSync(filePath);
+    });
+
+    // Clean up temporary video files
+    console.log('Cleaning up temporary video files');
+    fs.unlinkSync(videoPathIntro);
+    fs.unlinkSync(videoPathHook);
+    fs.unlinkSync(videoPath_sp);
+    fs.unlinkSync(videoPath_en_sp);
 
     return finalVideoPath;
 }
@@ -205,13 +247,15 @@ async function getVideoFromStoryAudio(
                         spanishText,
                         i,
                         outputImagesFolder,
-                        'sp'
+                        'sp',
+                        getBackgroundImagePath()
                     );
                     const englishPath = await createImageWithDynamicText(
                         englishText,
                         i,
                         outputImagesFolder,
-                        'en'
+                        'en',
+                        getBackgroundImagePath()
                     );
                     return [spanishPath, englishPath];
                 }
@@ -351,10 +395,6 @@ async function mergeAndProcessAudioFiles(
         })
     );
 
-    // Clean up Spanish files with short silence
-    // Leave these in the temp folder to test video generation
-    // spanishFilesWithSilence.forEach((file) => fs.unlinkSync(file));
-
     const slowSilencePaths_en_sp = await Promise.all(
         slowedPaths_en_sp.map(async (file) => {
             const outputPathWithSilence = path.join(
@@ -383,17 +423,11 @@ async function mergeAndProcessAudioFiles(
     );
     await mergeFiles(slowSilencePaths_sp, slowSilenceMergedPath_sp);
 
-    // Clean up slowed files
-    // slowedPaths_en_sp.forEach((file) => fs.unlinkSync(file));
-
     const slowSilenceMergedPath_en_sp = path.join(
         tempFolder,
         `slow_silence_merged_en_sp.mp3`
     );
     await mergeFiles(slowSilencePaths_en_sp, slowSilenceMergedPath_en_sp);
-
-    // Clean up files with silence
-    // slowSilencePaths_en_sp.forEach((file) => fs.unlinkSync(file));
 
     const finalOutputPath = path.join(
         outputFolder,
@@ -411,11 +445,6 @@ async function mergeAndProcessAudioFiles(
     ];
 
     await mergeFiles(audioFilesToMerge, finalOutputPath);
-
-    // Clean up final temporary files
-    // fs.unlinkSync(hookPath_silence);
-    // fs.unlinkSync(spanishSlowMergedShortSilencePath);
-    // fs.unlinkSync(slowSilenceMergedPath_en_sp);
 
     return finalOutputPath;
 }
@@ -442,10 +471,12 @@ async function moveFilesToArchiveFolder(storyTitle) {
         });
     };
 
-    // Move files from audio_input and misc_input
-    moveFiles(INPUT_AUDIO_FOLDER);
+    // Archive files
+    // moveFiles(INPUT_AUDIO_FOLDER);
+    moveFiles(OUTPUT_AUDIO_FOLDER);
     moveFiles(MISC_INPUT_FOLDER);
     moveFiles(TRANSCRIPTS_FOLDER);
+    moveFiles(OUTPUT_VIDEO_FOLDER);
 
     console.log(`All files moved to ${archiveFolderPath}`);
 }
@@ -469,8 +500,7 @@ async function createImageWithDynamicText(
         const backgroundImage = await loadImage(backgroundImagePath);
         ctx.drawImage(backgroundImage, 0, 0, width, height);
     } else {
-        // Use yellow background if no image path is provided
-        ctx.fillStyle = 'yellow';
+        ctx.fillStyle = '#2C3E50'; // Dark blue-grey background
         ctx.fillRect(0, 0, width, height);
     }
 
@@ -587,9 +617,6 @@ async function createVideoFromImagesAndAudio_StoryAudio(
     };
 
     console.log('Starting video generation...');
-    console.log('Images:', imagePaths);
-    console.log('Audio file:', finalAudioPath);
-    console.log('Output:', outputPath);
 
     return new Promise((resolve, reject) => {
         videoshow(videoshowImageObjs, videoOptions)
@@ -658,10 +685,6 @@ async function createVideoFromImagesAndAudio_OtherAudio(
         format: 'mp4',
     };
 
-    console.log('Images:', imagePaths);
-    console.log('Audio file:', finalAudioPath);
-    console.log('Output:', outputPath);
-
     return new Promise((resolve, reject) => {
         videoshow(videoshowImageObjs, videoOptions)
             .audio(finalAudioPath, { fade: false })
@@ -699,7 +722,8 @@ async function getVideoFromHook(
         hookText,
         0,
         outputImagesFolder,
-        'hook'
+        'hook',
+        getBackgroundImagePath()
     );
     console.log('Hook image created:', hookImagePath);
 
@@ -747,7 +771,8 @@ async function getVideoFromIntroMusic(
         introText,
         0,
         outputImagesFolder,
-        'intro'
+        'intro',
+        getBackgroundImagePath()
     );
     console.log('Intro image created:', introImagePath);
 
@@ -778,38 +803,6 @@ function getAudioDuration(audioPath) {
 }
 
 // Helper functions
-// function mergeFiles(inputPaths, outputPath) {
-//     return new Promise((resolve, reject) => {
-//         const concatProcess = ffmpeg();
-
-//         if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
-//             return reject(new Error('Invalid or empty input paths array'));
-//         }
-
-//         inputPaths.forEach((file) => {
-//             if (typeof file !== 'string' || file.trim() === '') {
-//                 return reject(new Error(`Invalid input path: ${file}`));
-//             }
-//             concatProcess.input(file);
-//         });
-
-//         concatProcess
-//             .on('end', () => {
-//                 console.log(
-//                     `Concatenation completed successfully. Output path: ${outputPath}`
-//                 );
-//                 resolve(outputPath);
-//             })
-//             .on('error', (err) => {
-//                 console.error(
-//                     'An error occurred during concatenation:',
-//                     err.message
-//                 );
-//                 reject(err);
-//             })
-//             .mergeToFile(outputPath, path.dirname(outputPath));
-//     });
-// }
 
 async function mergeFiles(inputPaths, outputPath) {
     if (!Array.isArray(inputPaths) || inputPaths.length === 0) {
@@ -954,4 +947,10 @@ function appendToFileName(filePath, suffix) {
     const ext = path.extname(filePath);
     const baseName = path.basename(filePath, ext);
     return path.join(dir, `${baseName}${suffix}${ext}`);
+}
+
+function getBackgroundImagePath() {
+    const imagePath = path.join('./assets', 'background_images', 'taxi.jpg');
+
+    return imagePath;
 }
